@@ -1,0 +1,47 @@
+---
+title: "Aim 2 DAG and SWIG"
+author: Chloe Mirzayi
+format: html
+editor: visual
+---
+
+```{r}
+library(ggdag)
+```
+
+# DAG created with dagitty
+
+```{r}
+mydag <- dag('dag {
+bb="-9.859,-3.678,5.594,3.186"
+"Condition T1" [pos="-5.439,1.644"]
+"Condition T2" [pos="-5.535,-0.236"]
+"Microbiome T1" [exposure,pos="-2.781,1.206"]
+"Microbiome T2" [outcome,pos="1.222,1.356"]
+"Treatment T1" [exposure,pos="-2.877,0.162"]
+"Treatment T2" [pos="1.607,0.072"]
+Age [pos="-1.948,2.728"]
+U1 [pos="-0.843,1.694"]
+U2 [pos="-7.169,0.858"]
+"Condition T1" -> "Condition T2"
+"Condition T1" -> "Treatment T1"
+"Condition T2" -> "Treatment T2"
+"Microbiome T1" -> "Microbiome T2"
+"Treatment T1" -> "Microbiome T1"
+"Treatment T1" -> "Treatment T2"
+"Treatment T2" -> "Microbiome T2"
+Age -> "Condition T1"
+Age -> "Condition T2"
+Age -> "Microbiome T1"
+Age -> "Microbiome T2"
+U1 -> "Microbiome T1"
+U1 -> "Microbiome T2"
+U2 -> "Condition T1"
+U2 -> "Condition T2"
+}
+')
+```
+
+```{r}
+ggdag(mydag, text= FALSE)+geom_dag_point(color="cadetblue1")+theme_dag_blank()+geom_dag_text(col="black", size=2) + theme(legend.title= element_blank()) + theme(plot.title= element_blank())
+```

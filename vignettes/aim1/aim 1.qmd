@@ -1,0 +1,343 @@
+------------------------------------------------------------------------
+
+---
+title: "Agreement Initial Analysis"
+author: "Chloe Mirzayi"
+format: html
+editor: visual
+---
+
+# Download spreadsheets
+NOTE FOR USE: Link to private google sheet removed. Instead load from data/aim 1/Aim 1 Agreement.xlsx.
+```{r, eval=FALSE}
+library(gsheet)
+library(reshape2)
+library(tidyr)
+
+url <- ""
+studies <- gsheet2tbl(url)
+
+alldata <- lapply(studies$url, gsheet2tbl)
+
+```
+
+# Study Agreement and Reliability
+
+## Agreement
+
+```{r}
+library(dplyr)
+library(irr)
+agreeStudy <- function(ds){
+  ds <- ds %>% mutate_all(.,toupper)
+  agree(ds[,2:ncol(ds)])$value %>% return()
+}
+```
+
+```{r}
+testblah <- lapply(data, agreeStudy) %>% melt() %>% select(1)
+  lapply(alldata, agreeStudy) %>% melt() %>% select(1) %>% write.csv(file="studyagree.csv")
+```
+
+## Reliability
+
+```{r}
+kappaStudy <- function(ds){
+  ds <- ds %>% mutate_all(.,toupper)
+  kappam.fleiss(ds[,2:ncol(ds)], detail = TRUE) %>% return()
+}
+```
+
+```{r}
+lapply(alldata, kappaStudy)
+kappam.fleiss(alldata[[17]][,2:3])
+```
+
+# Item Agreement
+
+```{r}
+library(matrixStats)
+iagree <- function(item){
+  
+  rowagree <- vector(mode="list", length=length(data))
+  #Calculate agreement for that row in each dataset
+  for (i in 1:length(data)){
+  ds <- data[[i]] %>% mutate_all(~replace(., is.na(.), "MISSING")) %>% mutate_all(.,toupper)
+  row <- ds[item,]
+  denom <- 6
+  
+  x <- 0
+  if (row[,2]=="YES") {x <- x+1}
+  if (row[,3]=="YES") {x <- x+1}
+  if (row[,4]=="YES") {x <- x+1}
+  num1 <- x*(x-1)
+  
+  x <- 0
+  if (row[,2]=="NOT PRESENT") {x <- x+1}
+  if (row[,3]=="NOT PRESENT") {x <- x+1}
+  if (row[,4]=="NOT PRESENT") {x <- x+1}
+  num2 <- x*(x-1)
+  
+  x <- 0
+  if (row[,2]=="NO") {x <- x+1}
+  if (row[,3]=="NO") {x <- x+1}
+  if (row[,4]=="NO") {x <- x+1}
+  num3 <- x*(x-1)
+  
+  rowagree[[i]] = num1/denom + num2/denom + num3/denom
+  }
+
+  agree <- rowagree %>% melt() %>% select(1)
+  meanagree <- colMeans(agree)
+  sdagree <- sd(agree[[1]])
+  data.frame(item=ds[item,1], agreement=meanagree, sd=sdagree) %>% return()
+}
+```
+
+```{r}
+library(reshape2)
+
+data <- alldata[-c(16,17,29)]
+listagree <- lapply(1:69, iagree)
+
+library(tidyr)
+listagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value) %>% write.csv(file="itemagree.csv")
+
+```
+
+# Study Agreement
+
+# Were Not Presents more likely for animal studies?
+
+```{r}
+library(stringr)
+studysum <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1BsAQU-zDCyt9kt4Ej2433o-46cCM2WcJl6zHPADFHrQ/edit#gid=879139569")
+
+head(studysum)
+numsbytype <- studysum %>% mutate(studynum = str_sub(study_id,-2)) %>% group_by(type) %>% summarize(studynum=list(unique(as.integer(studynum))))
+
+countstudies <- numsbytype$studynum %>% unlist
+#countstudies <- countstudies[-length(countstudies)] activate for cross-sectional
+alldata[countstudies] %>% unlist() %>% table(.,.>length(countstudies))
+```
+
+# Agreement by Study Type
+
+## Overall
+
+```{r}
+library(reshape2)
+library(tidyr)
+data <- alldata[-c(16,17,29)]
+allagree <- lapply(1:69, iagree)
+all <- allagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value)
+
+mean(all$agreement)
+sd(all$agreement)
+
+all %>% write.csv(file="allstudiesagree.csv")
+```
+
+## RCT
+
+```{r}
+countstudies <- numsbytype$studynum[numsbytype$type=="RCT"] %>% unlist
+countstudies
+
+data <- NA
+data<- alldata[countstudies]
+data <- data[-c(4)]
+rctagree <- lapply(1:69, iagree)
+
+rct <- rctagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value)
+
+mean(rct$agreement)
+sd(rct$agreement)
+
+rct %>% write.csv(file="rctagree.csv")
+```
+
+## Cross-Sectional
+
+```{r}
+countstudies <- numsbytype$studynum[numsbytype$type=="cross-sectional"] %>% unlist
+countstudies
+
+data <- NA
+data<- alldata[countstudies]
+data <- data[-c(10)]
+csagree <- lapply(1:69, iagree)
+
+cs <- csagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value)
+
+mean(cs$agreement)
+sd(cs$agreement)
+
+cs %>% write.csv(file="csagree.csv")
+```
+
+## Longitudinal
+
+```{r}
+countstudies <- numsbytype$studynum[numsbytype$type=="longitudinal"] %>% unlist
+countstudies
+
+data <- NA
+data<- alldata[countstudies]
+longagree <- lapply(1:69, iagree)
+
+long <- longagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value)
+
+mean(long$agreement)
+sd(long$agreement)
+
+long %>% write.csv(file="longagree.csv")
+```
+
+## Animal
+
+```{r}
+
+countstudies <- numsbytype$studynum[numsbytype$type=="animal"] %>% unlist
+countstudies
+
+data <- NA
+data<- alldata[countstudies]
+data <- data[-c(4)]
+anagree <- lapply(1:69, iagree)
+
+an <- anagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value)
+
+mean(an$agreement)
+sd(an$agreement)
+
+an %>% write.csv(file="anagree.csv")
+```
+
+```{r}
+studyagreement <- function(study){
+ds <- as.data.frame(alldata[study]) %>% mutate_all(~replace(., is.na(.), "MISSING")) %>% mutate_all(.,toupper)
+rowagree <- vector(mode="list", length=length(data))
+for (i in 1:69){
+  row <- ds[i,]
+  denom <- 6
+  
+  x <- 0
+  if (row[,2]=="YES") {x <- x+1}
+  if (row[,3]=="YES") {x <- x+1}
+  if (row[,4]=="YES") {x <- x+1}
+  num1 <- x*(x-1)
+  
+  x <- 0
+  if (row[,2]=="NOT PRESENT") {x <- x+1}
+  if (row[,3]=="NOT PRESENT") {x <- x+1}
+  if (row[,4]=="NOT PRESENT") {x <- x+1}
+  num2 <- x*(x-1)
+  
+  x <- 0
+  if (row[,2]=="NO") {x <- x+1}
+  if (row[,3]=="NO") {x <- x+1}
+  if (row[,4]=="NO") {x <- x+1}
+  num3 <- x*(x-1)
+  
+  rowagree[[i]] = num1/denom + num2/denom + num3/denom
+}
+
+  agree <- rowagree %>% melt() %>% select(1)
+  meanagree <- colMeans(agree)
+  sdagree <- sd(agree[[1]])
+  data.frame(agreement=meanagree, sd=sdagree) %>% return()
+}
+
+threeevals <- c(1:15, 18:28)
+lapply(threeevals, studyagreement) %>% melt() %>% pivot_wider(id_cols=L1, names_from=variable, values_from=value) %>% write.csv(file="studyagree.csv")
+```
+
+```{r}
+studyagreement <- function(i){
+  data <- alldata[i]
+  studyagree <- lapply(1:69, iagree)
+  
+  study <- studyagree %>% melt() %>% pivot_wider(id_cols=Number, names_from=variable, values_from=value)
+  
+  data.frame(mean = mean(study$agreement), sd = sd(study$agreement)) %>% return()
+}
+
+listagree <- lapply(1:28, studyagreement)
+
+listagree %>%  melt() %>% pivot_wider(id_cols=L1, names_from=variable, values_from=value)
+```
+
+# Multilevel model of agreement
+
+```{r}
+# Make a long data frame
+data <- alldata[-c(16,17,29)]
+
+colnames <- c("Number", "E1", "E2", "E3")
+datalong <- lapply(alldata, setNames, colnames) %>% melt()
+datalong <- datalong[datalong$L1 != 16 & datalong$L1 != 17 & datalong$L1 != 29,]
+
+# Calculate agreement for each item in the data frame
+
+rowagree <- vector(mode="list", length=nrow(datalong))
+  #Calculate agreement for each row
+  for (i in 1:nrow(datalong)){
+  row <- datalong[i,] %>%  mutate_all(~replace(., is.na(.), "MISSING")) %>% mutate_all(.,toupper)
+  denom <- 6
+  
+  x <- 0
+  if (row[,2]=="YES") {x <- x+1}
+  if (row[,3]=="YES") {x <- x+1}
+  if (row[,4]=="YES") {x <- x+1}
+  num1 <- x*(x-1)
+  
+  x <- 0
+  if (row[,2]=="NOT PRESENT") {x <- x+1}
+  if (row[,3]=="NOT PRESENT") {x <- x+1}
+  if (row[,4]=="NOT PRESENT") {x <- x+1}
+  num2 <- x*(x-1)
+  
+  x <- 0
+  if (row[,2]=="NO") {x <- x+1}
+  if (row[,3]=="NO") {x <- x+1}
+  if (row[,4]=="NO") {x <- x+1}
+  num3 <- x*(x-1)
+  
+  rowagree[[i]] = num1/denom + num2/denom + num3/denom
+  }
+
+agreelong <- rowagree %>% melt() %>% select(1)
+
+agreedatalong <- cbind(datalong, agreelong)
+```
+
+Label studies
+
+countstudies
+
+```{r}
+countstudies <- numsbytype$studynum[numsbytype$type=="RCT"] %>% unlist
+agreedatalong$studytype[agreedatalong$L1 %in% countstudies] <- "RCT"
+
+countstudies <- numsbytype$studynum[numsbytype$type=="cross-sectional"] %>% unlist
+agreedatalong$studytype[agreedatalong$L1 %in% countstudies] <- "cross-sectional"
+
+countstudies <- numsbytype$studynum[numsbytype$type=="longitudinal"] %>% unlist
+agreedatalong$studytype[agreedatalong$L1 %in% countstudies] <- "longitudinal"
+
+countstudies <- numsbytype$studynum[numsbytype$type=="animal"] %>% unlist
+agreedatalong$studytype[agreedatalong$L1 %in% countstudies] <- "animal"
+table(agreedatalong$studytype)
+```
+
+Ok now that we have agreement let's try a multilevel model
+
+```{r}
+
+library(lme4)
+library(lmerTest)
+lmer(value ~  studytype + (1|L1), data=agreedatalong) %>% summary()
+lm(value ~ studytype, data=agreedatalong) %>% summary()
+
+```

@@ -1,0 +1,349 @@
+---
+title: "Siamcat Yassour"
+format: html
+editor: visual
+---
+
+```{r}
+library(phyloseq)
+library(SIAMCAT)
+library(stringr)
+```
+
+```{r}
+phyloYassour <- import_biom("/mnt/STORE1/bighome/cmirzayi/aim3/data/Yassour/taxa.biom")
+metaYassour <- read.csv("/mnt/STORE1/bighome/cmirzayi/aim3/data/Yassour/YassourM_2016_metadata.csv")
+treeYassour <- read_tree("/mnt/STORE1/bighome/cmirzayi/aim3/data/Yassour/phylo/rooted_tree.nwk")
+# One of the metadata rows is missing and should be removed
+metaYass <- sample_data(metaYassour)
+metaYass$SampleID <- metaYass$X.SampleID
+metaYass <- metaYass[!is.na(metaYass$SampleID)]
+sample_names(metaYass) <- metaYass$SampleID
+sample_data(phyloYassour) <- metaYass
+yass <- phyloYassour
+phy_tree(yass) <- treeYassour
+```
+
+## Remove duplicates
+
+```{r}
+library(microViz)
+yassdd <- ps_dedupe(yass, vars=c("subject_id", "assessment_day"))
+yassdupes <- yass
+yass <- yassdd
+```
+
+## Simplify Antibiotics exposures
+
+```{r}
+sample_data(yass)$penicillins <- 0
+sample_data(yass)$cephalosporins <- 0
+sample_data(yass)$macrolides <- 0
+sample_data(yass)$sulfonamides <- 0
+sample_data(yass)$other <- 0
+sample_data(yass)$abx <- 0
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefalexin"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefalexin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Azithromycin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Azithromycin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin and clavulanic acid"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Amoxicillin and clavulanic acid"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Amoxicillin"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Amoxicillin"] <- 1
+  sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Amoxicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Cefaclor, Azithromycin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Cefaclor, Azithromycin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Amoxicillin, Cefaclor, Azithromycin"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Amoxicillin, Cefaclor, Azithromycin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Azithromycin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Azithromycin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Azithromycin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1 
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Azithromycin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Azithromycin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Azithromycin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Azithromycin, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Amoxicillin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Amoxicillin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefaclor"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefaclor"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Phenoxymethylpenicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Phenoxymethylpenicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Clarithromycin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Clarithromycin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Amoxicillin and clavulanic acid"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Azithromycin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Azithromycin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Azithromycin, Amoxicillin and clavulanic acid"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Clarithromycin, Cefalexin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Clarithromycin, Cefalexin"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Clarithromycin, Cefalexin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefalexin, Amoxicillin"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefalexin, Amoxicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Cefalexin, Amoxicillin"] <- 1
+  
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Ceftriaxone, Ceftriaxone"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Ceftriaxone, Ceftriaxone"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Amoxicillin, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Azithromycin, Amoxicillin and clavulanic acid" ] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Azithromycin, Amoxicillin and clavulanic acid" ] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Azithromycin, Amoxicillin and clavulanic acid" ] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Penicillin G, Netilmicin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Penicillin G, Netilmicin"] <- 1
+sample_data(yass)$other[sample_data(yass)$study_condition=="Penicillin G, Netilmicin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Clarithromycin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Clarithromycin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Clarithromycin, Trimetoprime and sulfadiazine"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Ceftriaxone"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Ceftriaxone"] <- 1
+  
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Cefalexin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Cefalexin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Cefalexin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Cefalexin, Amoxicillin and clavulanic acid"] <- 1
+  
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin and clavulanic acid, Amoxicillin, Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Azithromycin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin and clavulanic acid, Amoxicillin, Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Azithromycin"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin and clavulanic acid, Amoxicillin, Amoxicillin and clavulanic acid, Trimetoprime and sulfadiazine, Azithromycin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Azithromycin, Azithromycin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Azithromycin, Azithromycin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Amoxicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefalexin, Amoxicillin and clavulanic acid"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefalexin, Amoxicillin and clavulanic acid"] <-  1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Cefalexin, Amoxicillin and clavulanic acid"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Azithromycin, Amoxicillin"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Azithromycin, Amoxicillin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Azithromycin, Amoxicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Azithromycin, Amoxicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Azithromycin, Cefaclor"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Azithromycin, Cefaclor"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Azithromycin, Cefaclor"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Azithromycin, Cefaclor"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Systemic antibiotic NAS"] <- 1
+sample_data(yass)$other[sample_data(yass)$study_condition=="Systemic antibiotic NAS"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Azithromycin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Azithromycin"] <- 1
+sample_data(yass)$macrolides[sample_data(yass)$study_condition=="Amoxicillin and clavulanic acid, Azithromycin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Cefalexin, Cefalexin, Trimetoprime and sulfadiazine"] <- 1
+  
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Systemic antibiotic NAS" ] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Systemic antibiotic NAS" ] <- 1
+sample_data(yass)$other[sample_data(yass)$study_condition=="Amoxicillin, Systemic antibiotic NAS" ] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Trimetoprime and sulfadiazine, Amoxicillin, Amoxicillin"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Trimetoprime and sulfadiazine, Amoxicillin, Amoxicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Trimetoprime and sulfadiazine, Trimetoprime and sulfadiazine, Amoxicillin, Amoxicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Amoxicillin, Trimetoprime and sulfadiazine, Amoxicillin"] <- 1
+sample_data(yass)$penicillins[sample_data(yass)$study_condition=="Amoxicillin, Trimetoprime and sulfadiazine, Amoxicillin"] <- 1
+sample_data(yass)$sulfonamides[sample_data(yass)$study_condition=="Amoxicillin, Trimetoprime and sulfadiazine, Amoxicillin"] <- 1
+
+sample_data(yass)$abx[sample_data(yass)$study_condition=="Cefaclor, Cefalexin"] <- 1
+
+sample_data(yass)$cephalosporins[sample_data(yass)$study_condition=="Cefaclor, Cefalexin"] <- 1
+
+
+sample_data(yass)$abxsum <- sample_data(yass)$penicillins+sample_data(yass)$macrolides+sample_data(yass)$cephalosporins+sample_data(yass)$sulfonamides+sample_data(yass)$other
+sample_data(yass)$multiabx <- 0
+sample_data(yass)$multiabx[sample_data(yass)$abxsum>1] <- 1
+```
+
+## Determine cases and controls
+
+```{r}
+firstabx <- sample_data(yass) %>% data.frame() %>% filter(abx==1) %>% group_by(subject_id) %>%  summarize(firstabx=min(infant_age)) %>% dplyr::inner_join(data.frame(sample_data(yass)))
+
+lastpreabx <- firstabx %>% filter(infant_age<firstabx) %>% group_by(subject_id) %>% summarize(lastpreabx=max(infant_age)) %>% dplyr::inner_join(data.frame(sample_data(firstabx))) %>% select(subject_id, firstabx, lastpreabx) %>% group_by(subject_id) %>% summarize(firstabx=min(firstabx), lastpreabx=min(lastpreabx))
+
+sampyass <- dplyr::left_join(data.frame(sample_data(yass)), lastpreabx)
+sampyass <- sample_data(sampyass)
+sample_names(sampyass)<-sampyass$sample_id
+sample_data(yass) <- sampyass
+
+subyass <- subset_samples(yass, !is.na(firstabx) & !is.na(lastpreabx) & (firstabx==infant_age | lastpreabx==infant_age))
+yassgenus <-  aggregate_taxa(subYass, "Rank6")
+```
+
+```{r}
+yassgenus <- transform_sample_counts(yassgenus, function(OTU) OTU/sum(OTU) )
+otu_table(yassgenus) %>% colSums() %>% range()
+
+
+label.yass <- create.label(meta=sample_data(yassgenus), label="abx", case=1)
+sc.obj <- siamcat(feat=otu_table(yassgenus), label=label.yass, meta=sample_data(yassgenus))
+sc.filt <- filter.features(sc.obj, filter.method = "prevalence", cutoff = 0.1)
+```
+
+```{r}
+# Remove samples that had multiple abx exposures or other than penicillins
+yassba <- subset_samples(subyass, subject_id != "E005786" & subject_id != "E011878" &
+                          subject_id != "E020924" & subject_id != "E021940" &
+                          subject_id != "E006781")
+
+
+yassba<- transform_sample_counts(yassba, function(OTU) OTU/sum(OTU) )
+
+
+
+label.yass <- create.label(meta=sample_data(yassba), label="abx", case=1)
+sc.obj <- siamcat(feat=otu_table(yassba), label=label.yass, meta=sample_data(yassba))
+sc.filt <- filter.features(sc.obj, filter.method = "abundance", cutoff = 0.001)
+```
+
+```{r}
+sc.assc <- check.associations(
+  sc.filt,
+  alpha = 0.05,
+  mult.corr = "fdr",
+  feature.type = "filtered")
+
+association.plot(sc.assc, sort.by = 'fc', 
+                panels = c('fc', 'prevalence', 'auroc'))
+```
+
+```{r}
+sc.norm <- normalize.features(
+  sc.filt,
+  norm.method = "pass"
+  )
+```
+
+```{r}
+sc.split <-  create.data.split(
+  sc.norm,
+  num.folds = 6,
+  num.resample = 10,
+  inseparable = "subject_id"
+)
+
+```
+
+```{r}
+sc.mod <- train.model(
+  sc.split,
+  method = "randomForest"
+)
+
+sc.pred <- make.predictions(sc.mod)
+
+pred_matrix <- pred_matrix(sc.pred)
+```
+
+```{r}
+sc.eval <- evaluate.predictions(sc.pred)
+
+model.evaluation.plot(sc.eval)
+```
+
+```{r}
+model.interpretation.plot(
+sc.eval,
+fn.plot = 'yassour_siamcat.pdf',
+consens.thres = 0.01,
+limits = c(-3, 3),
+heatmap.type = 'zscore'
+) 
+```
+
+## Exploratory data analysis
+
+Subset to post exposure only then run PCoA
+
+```{r}
+
+
+
+sample_data(yassba)$Condition <- "pre-exposure"
+sample_data(yassba)$Condition[sample_data(yassba)$penicillins==1] <- "penicillins"
+
+yassord <- ordinate(yassba, method="PCoA", "bray")
+plot_ordination(yassba, yassord, type="samples", color="Condition", label="subject_id", shape="Condition") + scale_color_manual(values=c("blue", "black"))
+
+```
+
+PERMANOVA
+
+```{r}
+library(vegan)
+metadata <- as(sample_data(yassba), "data.frame")
+
+adonis2(distance(yassba, method="bray") ~ penicillins + subject_id,
+       data = metadata)
+```
+
+Density Plot
+
+```{r}
+dist <- phyloseq::distance(yassba, method="bray") %>% as.matrix() %>% as.data.frame()
+dist$sample_id <- colnames(dist)
+samp <- data.frame(sample_data(yassba))
+samp$sample_id <- rownames(samp)
+
+library(tidyr)
+step1 <- dplyr::inner_join(samp, dist) %>% select(subject_id |sample_id |infant_age | penicillins| starts_with("SRR")) %>% pivot_longer(cols=starts_with("SRR")) %>% mutate(sample1 = sample_id, sample2=name)
+
+step2 <- samp %>% select(sample2=sample_id, sub2=subject_id, time2=infant_age)
+
+step3 <- dplyr::inner_join(step1, step2) %>% filter(subject_id==sub2, time != time2) %>%  group_by(subject_id) %>% summarize(value=first(value), condition=last(abxfam))
+
+rayamox<- step3 %>% filter(condition=="amox") 
+rayplacebo <- step3 %>% filter(condition=="placebo")
+rayminoc <- step3 %>% filter(condition=="minoc")
+rayclinda <- step3 %>% filter(condition=="clinda")
+raycipro <- step3 %>% filter(condition=="cipro")
+```

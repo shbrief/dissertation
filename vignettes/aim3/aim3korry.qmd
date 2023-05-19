@@ -1,0 +1,207 @@
+---
+title: "Korry Dataset SIAMCAT"
+format: html
+editor: visual
+---
+
+```{r}
+
+library(curatedMetagenomicData)
+library(dplyr)
+library(mia)
+library(SIAMCAT)
+library(stringr)
+library(ggplot2)
+library(dotwhisker)
+library(biobroom)
+library(phyloseq)
+```
+
+# Create phyloseq object
+
+```{r}
+metaphlanToPhyloseq <- function(
+    tax,
+    metadat=NULL,
+    simplenames=TRUE,
+    roundtointeger=FALSE,
+    split="|"){
+    ## tax is a matrix or data.frame with the table of taxonomic abundances, rows are taxa, columns are samples
+    ## metadat is an optional data.frame of specimen metadata, rows are samples, columns are variables
+    ## if simplenames=TRUE, use only the most detailed level of taxa names in the final object
+    ## if roundtointeger=TRUE, values will be rounded to the nearest integer
+    xnames = rownames(tax)
+    shortnames = gsub(paste0(".+\\", split), "", xnames)
+    if(simplenames){
+        rownames(tax) = shortnames
+    }
+    if(roundtointeger){
+        tax = round(tax * 1e4)
+    }
+    x2 = strsplit(xnames, split=split, fixed=TRUE)
+    taxmat = matrix(NA, ncol=max(sapply(x2, length)), nrow=length(x2))
+    colnames(taxmat) = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")[1:ncol(taxmat)]
+    rownames(taxmat) = rownames(tax)
+    for (i in 1:nrow(taxmat)){
+        taxmat[i, 1:length(x2[[i]])] <- x2[[i]]
+    }
+    taxmat = gsub("[a-z]__", "", taxmat)
+    taxmat = phyloseq::tax_table(taxmat)
+    otutab = phyloseq::otu_table(tax, taxa_are_rows=TRUE)
+    if(is.null(metadat)){
+        res = phyloseq::phyloseq(taxmat, otutab)
+    }else{
+        res = phyloseq::phyloseq(taxmat, otutab, phyloseq::sample_data(metadat))
+    }
+    return(res)
+}
+```
+
+```{r}
+otuKorry <- read.csv("/mnt/STORE1/bighome/cmirzayi/aim3/data/korry/metaphlan/merged/metaphlan_taxonomic_profiles.tsv", sep="\t", strip.white = T, stringsAsFactors = F, row.names = 1)
+
+metaKorry <- read.csv("/mnt/STORE1/bighome/cmirzayi/aim3/data/korry/KorryB_2020_metadata.csv")
+samKorry <- sample_data(metaKorry)
+sample_names(samKorry) <- samKorry$NCBI_accession
+colnames(otuKorry) <- substr(colnames(otuKorry),1,10)
+
+korry <-  metaphlanToPhyloseq(otuKorry, samKorry)
+
+```
+
+# SIAMCAT
+
+## Prepare data
+
+```{r}
+sample_data(korry)$abx <- 0
+sample_data(korry)$abx[sample_data(korry)$study_condition!="none"] <- 1
+table(sample_data(korry)$abx, sample_data(korry)$study_condition)
+```
+
+```{r}
+
+korry <- transform_sample_counts(korry, function(OTU) OTU/sum(OTU) )
+
+```
+
+## Set variable of interest
+
+```{r}
+
+label.korry <- create.label(meta=sample_data(korry), label="abx", case=1)
+```
+
+## Create SIAMCAT object
+
+```{r}
+
+sc.obj <- siamcat(feat=otu_table(korry), label=label.korry, meta=sample_data(korry))
+
+```
+
+## Filter by abundance
+
+Cutoff is set at 0.001. Might want to experiment with this.
+
+```{r}
+
+sc.filt <- filter.features(sc.obj, filter.method = "abundance", cutoff = 0.001)
+
+```
+
+## Normalization
+
+Use pass through method since it shouldn't affect RF
+
+```{r}
+
+sc.norm <- normalize.features(
+  sc.filt,
+  norm.method = "pass"
+  )
+```
+
+## Data split
+
+Split the data, not sure the difference between folds and resamples and how to select the right number--right now I just picked numbers that didn't give an error message
+
+```{r}
+
+sc.split <-  create.data.split(
+  sc.norm,
+  num.folds = 6,
+  num.resample = 10
+)
+
+
+```
+
+## Random Forest
+
+Lasso also seems to work--others gave weird results (weird ROCs)
+
+```{r}
+sc.mod <- train.model(
+  sc.split,
+  method = "randomForest"
+)
+
+sc.pred <- make.predictions(sc.mod)
+
+pred_matrix <- pred_matrix(sc.pred)
+```
+
+## View ROC and PR curve
+
+```{r}
+sc.eval <- evaluate.predictions(sc.pred)
+
+model.evaluation.plot(sc.eval)
+```
+
+## Save output
+
+```{r}
+model.interpretation.plot(
+sc.eval,
+fn.plot = 'siamcat_korry.pdf',
+consens.thres = 0.01,
+limits = c(-3, 3),
+heatmap.type = 'zscore'
+) 
+```
+
+# Exploratory data analysis
+
+## PCoA Plot
+
+```{r}
+
+sample_data(korry)$Condition <- sample_data(korry)$study_condition
+sample_data(korry)$Condition[sample_data(korry)$Condition=="amoxicillin"] <- "penicillins"
+sample_data(korry)$Condition[sample_data(korry)$Condition=="ciprofloxacin"] <- "quinolones"
+sample_data(korry)$Condition[sample_data(korry)$Condition=="doxycycline"] <- "tetracyclines"
+sample_data(korry)$Condition[sample_data(korry)$Condition=="none"] <- "control"
+
+sample_data(korry)$abx <- factor(sample_data(korry)$abx, levels=c(1,0))
+
+korryord <- ordinate(korry, method="PCoA", "bray")
+
+plot_ordination(korry, korryord, type="samples", color="Condition", label="subject_id", shape="Condition") + scale_color_manual(values=c("black", "blue", "green", "red"))
+
+ggsave("korry_pcoa.png")
+
+```
+
+Can't make density plot because there's no before and after in Korry.
+
+## PERMANOVA
+
+```{r}
+library(vegan)
+metadata <- as(sample_data(korry), "data.frame")
+
+adonis2(distance(korry, method="bray") ~ study_condition,
+       data = metadata)
+```

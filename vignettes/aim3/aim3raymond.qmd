@@ -1,0 +1,226 @@
+---
+title: "Raymond Pre + Post Only"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Load required packages
+
+SIAMCAT is used for analysis
+
+```{r}
+library(curatedMetagenomicData)
+library(dplyr)
+library(mia)
+library(SIAMCAT)
+library(stringr)
+library(ggplot2)
+```
+
+# Download data from cMD
+
+## Filter cMD metadata table for Raymond
+
+```{r}
+meta <- curatedMetagenomicData::sampleMetadata
+submeta <- meta %>% filter(study_name=="RaymondF_2016")
+```
+
+## Download data for matching metadata
+
+Table should match the metadata table
+
+```{r}
+ray<- returnSamples(submeta, "relative_abundance")
+colData(ray)$study_name %>% table()
+```
+
+## Convert to proportions in 0 to 1
+
+```{r}
+assay(ray) <- assay(ray)/100
+```
+
+## Subset to just Raymond immediately pre and post-exposure cases
+
+There should be 24 data points (18 cases, 6 controls)
+
+```{r}
+#ray <- subset(rayvince, select =colData(rayvince)$study_name=="RaymondF_2016")
+rayprepost <- subset(ray, select =colData(ray)$study_name=="RaymondF_2016" &
+                colData(ray)$days_from_first_collection <= 7)
+
+colData(rayprepost)$study_name %>% table()
+```
+
+```{r}
+phyloray <- makePhyloseqFromTreeSummarizedExperiment(rayprepost, abund_values = "relative_abundance")
+```
+
+# SIAMCAT
+
+## Data preparation
+
+```{r}
+sample.phyloray <- sample_data(phyloray)
+feat.phyloray <- otu_table(phyloray)
+```
+
+## Remove duplicate variables
+
+Remove two variables that are identical with condition of interest as they were causing issues down the line
+
+```{r}
+sample.phyloray <- sample.phyloray[, -which(names(sample.phyloray) %in% c("antibiotics_family", "antibiotics_current_use"))]
+
+```
+
+## Set variable of interest
+
+```{r}
+label.ray <- create.label(meta=sample.phyloray, label="study_condition", case="cephalosporins")
+```
+
+## Create SIAMCAT object
+
+```{r}
+sc.obj <- siamcat(feat=feat.phyloray, label=label.ray, meta=sample.phyloray)
+```
+
+## Filter by abundance
+
+Cutoff is set at 0.001. Might want to experiment with this.
+
+```{r}
+sc.filt <- filter.features(sc.obj, filter.method = "abundance", cutoff = 0.001)
+```
+
+## Normalization
+
+Not necessary due to RF
+
+```{r}
+sc.norm <- normalize.features(
+  sc.filt,
+  norm.method = "pass"
+  )
+```
+
+## Prepare to run machine learning task
+
+Split the data, not sure the difference between folds and resamples and how to select the right number--right now I just picked numbers that didn't give an error message
+
+```{r}
+
+sc.split <-  create.data.split(
+  sc.norm,
+  num.folds = 6,
+  num.resample = 10,
+  inseparable = "subject_id"
+)
+
+```
+
+## Random Forest
+
+Lasso also seems to work--others gave weird results (weird ROCs)
+
+```{r}
+
+sc.mod <- train.model(
+  sc.split,
+  method = "randomForest"
+)
+
+sc.pred <- make.predictions(sc.mod)
+pred_matrix <- pred_matrix(sc.pred)
+
+```
+
+## View ROC and PR curve
+
+Separate out immediate and 7 days post-exposure
+
+```{r}
+sc.eval <- evaluate.predictions(sc.pred)
+model.evaluation.plot(sc.eval)
+```
+
+## Prediction Spaghetti Plot
+
+```{r}
+library(stringr)
+spag <- data.frame(pred_matrix, days=rownames(pred_matrix) %>% str_extract(pattern="[EC]\\w*") %>% str_sub(start=2) %>% as.integer(), subj = rownames(pred_matrix) %>% str_extract("[P]\\d{1,2}"))
+colnames(spag) <- c("Predicted Probability", "CV_rep2", "Days", "subj")
+
+ggplot(data=spag) + geom_line(aes(x=Days, y=`Predicted Probability`, group=subj, color=subj)) + geom_boxplot(aes(x=Days,y=`Predicted Probability`, group=Days, alpha = 1)) + theme_minimal() +  theme(legend.position="none")
+
+
+```
+
+## Export final model interpretation plot as PDF
+
+```{r}
+model.interpretation.plot(
+sc.eval,
+fn.plot = 'raymond_siamcat.pdf',
+consens.thres = 0.01,
+limits = c(-3, 3),
+heatmap.type = 'zscore'
+)
+```
+
+# Exploratory data analysis
+
+## PCoA Plot
+
+```{r}
+sample_data(phyloray)$Condition <- sample_data(phyloray)$study_condition
+sample_data(phyloray)$Condition[sample_data(phyloray)$days_from_first_collection==0] <- "baseline"
+sample_data(phyloray)$Condition <- as.factor(sample_data(phyloray)$Condition)
+rayord <- ordinate(phyloray, method="PCoA", "bray")
+plot_ordination(phyloray, rayord, type="samples", color="Condition", label="subject_id", shape="Condition") + scale_color_manual(values=c("black", "purple", "green"))
+ggsave("raymond_pcoa.png")
+```
+
+## Post-exposure PCoA Plot
+
+```{r}
+raypost <- subset_samples(phyloray, days_from_first_collection==7)
+rayord <- ordinate(raypost, method="PCoA", "bray")
+plot_ordination(raypost, rayord, type="samples", color="Condition", label="subject_id", shape="Condition") + scale_color_manual(values=c("red", "blue"))
+
+```
+
+PERMANOVA
+
+```{r}
+library(vegan)
+metadata <- as(sample_data(phyloray), "data.frame")
+
+adonis2(distance(phyloray, method="bray") ~ study_condition + subject_id ,
+       data = metadata)
+```
+
+## Distance density
+
+```{r}
+raydist <- phyloseq::distance(phyloray, method="bray") %>% as.matrix() %>% as.data.frame()
+raydist$sample_id <- colnames(raydist)
+sampray <- data.frame(sample_data(phyloray))
+sampray$sample_id <- rownames(sampray)
+
+library(tidyr)
+raymondbray <- dplyr::inner_join(sampray, raydist) %>% select(sample_id | matches("[P]\\d*[EC]\\d")) %>% pivot_longer(cols=matches("[P]\\d*[EC]\\d")) %>% mutate(sample1 = str_extract(string=sample_id, pattern="[P]\\d*"), sample2=str_extract(string=name, pattern="[P]\\d*")) %>% filter(sample1==sample2 & value != 0) %>% group_by(sample1) %>% summarize(value=first(value), condition=first(str_extract(sample_id, pattern="[EC]")))
+
+rayexpose <- raymondbray %>% filter(condition=="E") 
+raycontrol <- raymondbray %>% filter(condition=="C")
+
+library(ggthemes)
+ggplot(rayexpose, aes(x=value, color= "Cephalosporins", ..scaled..))+geom_density()+geom_density(data=raycontrol, aes(color="Controls")) +
+   labs(color=NULL, x="Bray-Curtis dissimilarity between t0 and t7", y="Density Estimate")+
+   theme(legend.position = c(0, 1),legend.justification = c(0, 1), legend.title = element_blank())+
+  scale_color_manual(values = c("red","green"))+theme_clean()
+ggsave("raymond_prepost.png")
+```
